@@ -1,27 +1,33 @@
+import threading
+import queue
 import datetime
 import time
 import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, GLib, GdkPixbuf, GObject
 import os
-from os.path import join
-from glob import glob
-import subprocess
 from utils import *
 from mplayer import *
 
 
-class MyWindow(Gtk.Window):
+class FlowdIo(Gtk.Window):
 
     def __init__(self):
 
         alsa_device = 2
         self.mplayer = MPlayer(alsa_device)
 
+        self.com_queue = queue.Queue()
+        self.worker_thread_update_pos = None
+        self.worker_thread_update_song = None
+
+        self.playback_current_total = 1
+        self.playback_current_song = ""
+
         Gtk.Window.__init__(self, title="Window 1")
         self.set_border_width(10)
         self.set_default_size(1900, 1000)
-        self.set_icon_from_file("icon.png")
+        self.set_icon_from_file("res/img/icon.png")
 
         header = Gtk.HeaderBar(title="FlowdIo")
         header.props.show_close_button = True
@@ -47,6 +53,9 @@ class MyWindow(Gtk.Window):
         self.flowbox.set_valign(Gtk.Align.START)
         self.flowbox.set_selection_mode(Gtk.SelectionMode.NONE)
 
+        playback_status_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        playback_status_box.set_homogeneous(False)
+
         albums_scrolled.add(self.flowbox)
 
         self.path_to_scan = Gtk.Entry()
@@ -69,7 +78,10 @@ class MyWindow(Gtk.Window):
         button_pause.connect("clicked", self.playback_pause)
 
 
+        self.playback_progressbar = Gtk.ProgressBar()
+
         self.position_label = Gtk.Label("0") 
+        self.playback_song_current_label = Gtk.Label("") 
 
         command_box.pack_start(button_select, False, False, 0)
         command_box.pack_start(button_scan, False, False, 0)
@@ -78,17 +90,22 @@ class MyWindow(Gtk.Window):
         command_box.pack_start(button_prev, False, False, 0)
         command_box.pack_start(button_next, False, False, 0)
         command_box.pack_start(button_pause, False, False, 0)
-        command_box.pack_start(self.position_label, False, False, 0)
+
+        playback_status_box.pack_start(self.position_label, False, False, 0)
+        playback_status_box.pack_start(self.playback_progressbar, True, True, 0)
+        playback_status_box.pack_start(self.playback_song_current_label, True, True, 0)
+
 
         self.info_label = Gtk.Label("Welcome")
         self.info_label.set_line_wrap(True)   
 
         self.progressbar = Gtk.ProgressBar()
 
-        info_box.pack_start(self.info_label, False, True, 0)
-        info_box.pack_start(self.progressbar, False, True, 0)
+        info_box.pack_start(self.info_label, False, False, 0)
+        info_box.pack_start(self.progressbar, False, False, 0)
 
         main_box.pack_start(command_box, False, False, 0)
+        main_box.pack_start(playback_status_box, False, False, 0)
         main_box.pack_start(albums_scrolled, True, True, 0)
         main_box.pack_start(info_box, False, False, 0)
 
@@ -111,30 +128,39 @@ class MyWindow(Gtk.Window):
           self.mplayer = MPlayer(2)
           self.mplayer.command('loadlist', self.playlist_filename)   
 
-        """ 
-        i = 5000000000
-        while i > 0 :
-          time.sleep(1) 
-          GObject.timeout_add_seconds(1, self.update_playback_position, []) """
+        GLib.timeout_add(1000, self.update_playback_position) 
 
 
     def update_playback_position(self, widget):
-
-        pos = self.mplayer.get_time_pos()
-        if pos == None:
-          pos = 0
-        pos = datetime.timedelta(seconds=pos)
-
-        tot = self.mplayer.get_time_length()
-        if tot == None:
-          tot = 0        
-        tot = datetime.timedelta(seconds=tot)
-
-        self.position_label.set_text(str(pos) + "/" + str(tot))   
-
-        self.position_label.show_all()
         
-        return True   
+      pos = 10
+
+
+      current_pos = str(format_result(pos))
+
+      
+      self.position_label.set_text(current_pos + " / " + str(self.playback_current_total))  
+
+      self.playback_progressbar.set_fraction(pos/self.playback_current_total)
+
+      self.playback_song_current_label.set_text(self.playback_current_song)
+
+
+    
+
+
+
+    def update_playback_song(self, widget):
+
+      def update_song(*data):
+        
+          self.playback_current_song = data[0]
+
+      while True:
+          GLib.idle_add(update_song, 
+                        self.mplayer.get_file_name()
+                        )
+          time.sleep(1)  
 
 
     def playback_pause(self, widget):
@@ -155,14 +181,11 @@ class MyWindow(Gtk.Window):
         self.mplayer.pt_step([-1])
 
 
-
     def scan_folder(self, widget):
 
         self.path_to_scan.get_text()
 
-        self.load_cover_view()
-
-        #GObject.timeout_add_seconds(1, self.load_cover_view)
+        self.load_cover_view(None)
 
 
     def on_folder_clicked(self, widget):
@@ -238,7 +261,7 @@ class MyWindow(Gtk.Window):
           try :
             pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_size(image_file_path, 350, 350)
           except :
-            image_file_path = "nocover.png"
+            image_file_path = "res/img/nocover.png"
             pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_size(image_file_path, 350, 350)
             pass
 
@@ -267,7 +290,7 @@ class MyWindow(Gtk.Window):
           self.flowbox.show_all()
 
 
-win = MyWindow()
+win = FlowdIo()
 win.connect("destroy", Gtk.main_quit)
 win.show_all()
 

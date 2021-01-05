@@ -1,6 +1,7 @@
 import os
 from glob import escape
 from os.path import join
+import datetime
 
 
 def get_dirs(dir_path):
@@ -11,6 +12,10 @@ def get_dirs(dir_path):
   subdirs = [x[0] for x in os.walk(dir_path, topdown=False)]
   return sorted(subdirs)     
 
+def format_result(result):
+    seconds = int(result)
+    output = datetime.timedelta(0, seconds)
+    return output
 
 def get_files_with_extension(dir_path, exts):
   """
