@@ -19,10 +19,14 @@ def get_files_with_extension(dir_path, exts):
 
   files = []
 
-  for ext in exts:
-    files.append(escape(join(dir_path, ext)))
+  dir_files = os.listdir(dir_path)
 
-  return files
+  for ext in exts:
+    for file in dir_files :
+      if file.lower().endswith('.' + ext.lower()):
+        files.append(join(dir_path, file))
+
+  return sorted(files)
 
 
 def get_folder_image(dir_path):
@@ -40,3 +44,11 @@ def get_folder_image(dir_path):
     image_file = "nocover.png"
 
   return image_file
+
+
+
+
+def build_playlist(filename, itemlist):
+
+    with open(filename, "w") as outfile:
+        outfile.write("\n".join(itemlist))
